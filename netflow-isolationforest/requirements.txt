@@ -1,0 +1,6 @@
+matplotlib==3.5.1
+numpy==1.22.0
+pyspark==3.2.1
+pyspark_dist_explore==0.1.8
+scikit_learn==1.0.2
+setuptools==44.0.0
