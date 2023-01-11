@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: midas
+spec:
+  restartPolicy: OnFailure
+  containers:
+    - name: palantir-midas
+      image: 10.101.10.244:5000/palantir-midas:1.0
+      imagePullPolicy: Always
+      env:
+        - name: KAFKA_BROKERS_CSV
+          value: "10.101.41.255:9092"
+        - name: KAFKA_TOPIC_IN
+          value: "netflow-anonymized-preprocessed"
+        - name: KAFKA_TOPIC_OUT
+          value: "netflow-ad-tba"
+        - name: MIDAS_SLOT
+          value: "1m"
+        - name: MIDAS_THR
+          value: "706206900"

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ad-aggregator
+spec:
+  restartPolicy: OnFailure
+  containers:
+    - name: palantir-ad-aggregator
+      image: 10.101.10.244:5000/palantir-ad-aggregator:1.0
+      imagePullPolicy: Always
+      env:
+        - name: KAFKA_BROKERS_CSV
+          value: "10.101.41.255:9092"
+        - name: KAFKA_TOPIC_IN
+          value: "netflow-ad-tba"
+        - name: KAFKA_TOPIC_OUT
+          value: "netflow-ad-out"
