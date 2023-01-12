@@ -59,7 +59,7 @@ if 'TRAINING' in os.environ:
     TRAINING = True
     if KAFKA_TOPIC_OUT is not None:
         print('[!] Ignoring KAFKA_TOPIC_OUT env var during training')
-        KAFKA_TOPIC_OUT = True
+        KAFKA_TOPIC_OUT = None
     # TODO do we need other env vars (e.g. ELK endpoints)?
 else:
     TRAINING = False

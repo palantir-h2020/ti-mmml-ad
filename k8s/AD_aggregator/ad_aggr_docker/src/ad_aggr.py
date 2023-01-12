@@ -136,6 +136,7 @@ class ADresult():
             else:
                 ftrs_cnt = len(ftrs.split(','))
 
+            # We check the number of ad_module_specific_ftr even if we simply copy them w/o further processing
             if ftrs_cnt != ADresult.ad_module_specific_ftr_cnt[name]:
                 logger.error('Unexpected number of ad_module_specific_ftr_cnt: got %d instead of %d' % (ftrs_cnt, ADresult.ad_module_specific_ftr_cnt[name]))
                 raise Exception
@@ -155,25 +156,6 @@ class ADresult():
         else:
             logger.error('Cannot parse AD_data')
             raise Exception
-        '''
-        # Old code used when ad_module_specific_ftrs used to be flat in the CSV string w/o being enclosed in double quoted square brackets
-        AD_data_split = AD_data.split(',')
-        logger.debug('AD_data_split: %s' % AD_data_split)
-        if len(AD_data_split) == ADresult.ad_module_specific_ftr_cnt[name] + 2:
-            ftrs = AD_data_split[:-2]
-            score = AD_data_split[-2]
-            is_anomalous = AD_data_split[-1]
-            self.ftrs = ftrs
-            self.score = score
-            self.is_anomalous = is_anomalous
-
-            logger.debug(f'{self.name}_ftrs: {self.ftrs}')
-            logger.debug(f'{self.name}_score: {self.score}')
-            logger.debug(f'{self.name}_is_anomalous: {self.is_anomalous}')
-        else:
-            logger.error('Unexpected number of ad_module_specific_ftr_cnt: got %d instead of %d' % (len(AD_data_split) -2, ADresult.ad_module_specific_ftr_cnt[name]))
-            raise Exception
-        '''
 
     def __repr__(self):
         pass
@@ -330,24 +312,6 @@ class AggrADresult():
         r += ')'
 
         return r
-
-    def serialize_old(self):
-        csv_str_listed = []
-        # append ALL NetFlow features
-        csv_str_listed += self.netflow_ftrs
-
-        # for each MIDAS/AE/GANomaly/IFOREST method append {name},"[ftrs]",{score},{is_anomalous}
-        for name,r in zip(self.__all_AD_name(),
-                          self.__all_AD_results()):
-            if r is not None:
-                csv_str_listed += [name, '"%s"'% r.ftrs, r.score, r.is_anomalous]
-            else:
-                csv_str_listed += [name, '"[]"', None, None]
-
-        csv_str = ','.join(map(str, csv_str_listed))
-        logger.debug(csv_str)
-
-        return csv_str
 
     def serialize(self):
         csv_str_listed = []
