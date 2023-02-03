@@ -164,7 +164,8 @@ class ADresult():
 class AggrADresult():
     mad_modules_names = ['MIDAS', 'AE', 'GANomaly', 'IFOREST'] # Fixed serialization order expected by TCAM, do not change!
     netflow_ftr_cnt_raw = 48 # netflow-raw
-    netflow_ftr_cnt_anonym_preproc = 62 # netflow-anonymized-preprocessed
+    netflow_ftr_cnt_anonym_preproc_wo_zeek_and_SDA = 62 # netflow-anonymized-preprocessed
+    netflow_ftr_cnt_anonym_preproc = 62+1+8 # netflow-anonymized-preprocessed (62 NetFlow ftrs + 1 Zeek ftr + 8 SDA ftrs)
 
     def __init__(self, key):
         self.key = key
@@ -191,7 +192,10 @@ class AggrADresult():
             logger.error('Unexpected NetFlow format: cannot extract flow key (unrecognised NetFlow topic from the number of NetFlow features)')
             return None
 
-        AD_module_independent_ftrs = ad_event_split[:netflow_ftr_cnt]
+        # AD_module_independent_ftrs = ad_event_split[:netflow_ftr_cnt]
+        # Since for each flow we get duplicated messages (both with 71 ftrs but one with SDA ftrs set and the other with Zeek)
+        # we use as aggregation key the "old" 62 ftrs
+        AD_module_independent_ftrs = ad_event_split[:self.netflow_ftr_cnt_anonym_preproc_wo_zeek_and_SDA]
         logger.debug("AD_module_independent_ftrs: %s" % AD_module_independent_ftrs)
         AD_module_independent_ftrs = ''.join(AD_module_independent_ftrs)
         # TODO we could simply use return AD_module_independent_ftrs as key or '|'.join() to make them human readable
