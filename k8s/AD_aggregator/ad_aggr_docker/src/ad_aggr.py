@@ -195,7 +195,7 @@ class AggrADresult():
         # AD_module_independent_ftrs = ad_event_split[:netflow_ftr_cnt]
         # Since for each flow we get duplicated messages (both with 71 ftrs but one with SDA ftrs set and the other with Zeek)
         # we use as aggregation key the "old" 62 ftrs
-        AD_module_independent_ftrs = ad_event_split[:self.netflow_ftr_cnt_anonym_preproc_wo_zeek_and_SDA]
+        AD_module_independent_ftrs = ad_event_split[:AggrADresult.netflow_ftr_cnt_anonym_preproc_wo_zeek_and_SDA]
         logger.debug("AD_module_independent_ftrs: %s" % AD_module_independent_ftrs)
         AD_module_independent_ftrs = ''.join(AD_module_independent_ftrs)
         # TODO we could simply use return AD_module_independent_ftrs as key or '|'.join() to make them human readable
