@@ -126,7 +126,8 @@ def send_alert(data_dict, score, midas, producer, is_anomalous, propagate_to_ADa
     ad_msg_cnt += 1
 
 netflow_ftr_cnt_raw = 48 # netflow-raw
-netflow_ftr_cnt_anonym_preproc = 62 # netflow-anonymized-preprocessed
+# netflow_ftr_cnt_anonym_preproc = 62 # netflow-anonymized-preprocessed
+netflow_ftr_cnt_anonym_preproc = 62+1+8 # netflow-anonymized-preprocessed (62 NetFlow ftrs + 1 Zeek ftr + 8 SDA ftrs)
 valid_netflow_cnt_values = [netflow_ftr_cnt_raw, netflow_ftr_cnt_anonym_preproc]
 def proc_msg(data, midas, producer):
     # Check if data has been correctly decoded (error already logged by kafka_utils)
