@@ -1,10 +1,13 @@
+from kafka import TopicPartition
 from kafka_utils import *
 from datetime import datetime, timedelta
 from collections import namedtuple
 import ipaddress
 import os
+import requests
 import sys
 import time
+import traceback
 try:
     sys.path.index('%s/MIDAS.Python/src' % os.getcwd())
 except ValueError:
@@ -64,6 +67,25 @@ if 'TRAINING' in os.environ:
 else:
     TRAINING = False
 
+if 'TENANT_ID' in os.environ:
+    TENANT_ID = os.environ['TENANT_ID']
+    if TENANT_ID != 'ANY_TENANT' and not TENANT_ID.isnumeric():
+        print('TENANT_ID env var must be either ANY_TENANT or a number')
+        exit()
+
+    if TENANT_ID == 'ANY_TENANT':
+        # No need to check/use TENANT_SERVICE_API_URL
+        TENANT_SERVICE_API_URL = None
+    else:
+        if 'TENANT_SERVICE_API_URL' in os.environ:
+            TENANT_SERVICE_API_URL = os.environ['TENANT_SERVICE_API_URL']
+        else:
+            print('TENANT_SERVICE_API_URL env var required')
+            exit()
+else:
+    TENANT_ID = 'ANY_TENANT'
+    TENANT_SERVICE_API_URL = None
+
 if 'VERBOSITY' in os.environ:
     if os.environ['VERBOSITY'] == 'DEBUG':
         VERBOSITY = logging.DEBUG
@@ -111,6 +133,7 @@ def parse_cic_ids_ts(s):
 
 def send_alert(data_dict, score, midas, producer, is_anomalous, propagate_to_ADaggr_only_anomalies=PROPAGATE_ANOMALIES_ONLY):
     global ad_msg_cnt
+    global PARTITION_ID
     if propagate_to_ADaggr_only_anomalies and not is_anomalous:
         return
 
@@ -122,7 +145,10 @@ def send_alert(data_dict, score, midas, producer, is_anomalous, propagate_to_ADa
         data_out = data_dict['raw_netflow_data']
         data_out += ',MIDAS,"[]",%f,%d' % (score, is_anomalous)
         #data_out += ',MIDAS,%f,%d' % (score, is_anomalous)
-    producer.send(KAFKA_TOPIC_OUT, key='MIDAS-AD-msg-%d' % ad_msg_cnt, value=data_out)
+    if TENANT_ID == 'ANY_TENANT':
+        producer.send(KAFKA_TOPIC_OUT, key='MIDAS-AD-msg-%d' % ad_msg_cnt, value=data_out)
+    else:
+        producer.send(KAFKA_TOPIC_OUT, key='MIDAS-AD-msg-%d' % ad_msg_cnt, value=data_out, partition=PARTITION_ID)
     ad_msg_cnt += 1
 
 netflow_ftr_cnt_raw = 48 # netflow-raw
@@ -238,6 +264,8 @@ if __name__ == "__main__":
     logger.info('MIDAS_THR = %s' % MIDAS_THR)
     logger.info('PROPAGATE_ANOMALIES_ONLY = %s' % PROPAGATE_ANOMALIES_ONLY)
     logger.info('TRAINING = %s' % TRAINING)
+    logger.info('TENANT_SERVICE_API_URL = %s' % TENANT_SERVICE_API_URL)
+    logger.info('TENANT_ID = %s' % TENANT_ID)
     if VERBOSITY == logging.DEBUG:
         logger.info('VERBOSITY = DEBUG')
     elif VERBOSITY == logging.INFO:
@@ -253,8 +281,24 @@ if __name__ == "__main__":
     logger.info('\x1b[1;32;40m' + midas.name + '\x1b[0m')
 
     ad_msg_cnt = 0
+    PARTITION_ID = None
+
     # group_id='group_%s' % midas.name, # set  non-None group_id to avoid consuming same events across re-runs of MIDAS. NB we include midas.name to make all instances consume all events.
-    consumer = build_kafka_consumer(KAFKA_BROKERS_CSV, KAFKA_TOPIC_IN, 'group_%s' % midas.name, 'csv', 'csv')
+    if TENANT_ID == 'ANY_TENANT':
+        consumer = build_kafka_consumer(KAFKA_BROKERS_CSV, KAFKA_TOPIC_IN, 'group_%s' % midas.name, 'csv', 'csv')
+    else:
+        try:
+            r = requests.get('%s/%s' % (TENANT_SERVICE_API_URL, TENANT_ID))
+            PARTITION_ID = r.json()['partition'] # int
+            logger.info('PARTITION_ID = %d' % PARTITION_ID)
+        except:
+            logger.error('Cannot retrieve PARTITION_ID for PARTITION_ID %s' % TENANT_ID)
+            traceback.print_exc()
+            exit()
+        # topic and group_id set to None, not compatible with assign()
+        consumer = build_kafka_consumer(KAFKA_BROKERS_CSV, None, None, 'csv', 'csv')
+        consumer.assign([TopicPartition(KAFKA_TOPIC_IN, PARTITION_ID)])
+    # Explicit partitions for KafkaProducer() are set in send() fx, no changes are needed here
     if KAFKA_TOPIC_OUT:
         producer = build_kafka_producer(KAFKA_BROKERS_CSV, KAFKA_TOPIC_OUT_FORMAT, KAFKA_TOPIC_OUT_FORMAT)
     else:

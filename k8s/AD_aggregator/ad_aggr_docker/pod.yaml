@@ -15,3 +15,7 @@ spec:
           value: "netflow-ad-tba"
         - name: KAFKA_TOPIC_OUT
           value: "netflow-ad-out"
+        - name: TENANT_SERVICE_API_URL
+          value: "http://10.101.41.42:6000/api/partition"
+        - name: TENANT_ID
+          value: "ANY_TENANT"

@@ -11,7 +11,10 @@ if [[ $(kubectl get pods --all-namespaces | grep midas | wc -l) -gt 0 ]]; then
 fi
 
 echo "Creating MIDAS pod"
+# Any tenant
 kubectl create -f ${MIDAS_DIR}/pod.yaml
+# Tenant 1
+# sed -e 's|ANY_TENANT|1|g' ${MIDAS_DIR}/pod.yaml | kubectl create -f -
 
 echo "Waiting for MIDAS pod startup"
 while [[ $(kubectl get pods --all-namespaces | grep midas | grep Running | wc -l) -eq 0 ]]; do

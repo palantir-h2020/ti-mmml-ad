@@ -2,11 +2,14 @@
 
 import csv
 import hashlib
+from kafka import TopicPartition
 from kafka_utils import *
 import logging
 import os
+import requests
 import sched
 import threading
+import traceback
 import time
 
 '''
@@ -75,6 +78,25 @@ if 'DUMMY_CONSUMER' in os.environ:
     DUMMY_CONSUMER = True
 else:
     DUMMY_CONSUMER = False
+
+if 'TENANT_ID' in os.environ:
+    TENANT_ID = os.environ['TENANT_ID']
+    if TENANT_ID != 'ANY_TENANT' and not TENANT_ID.isnumeric():
+        print('TENANT_ID env var must be either ANY_TENANT or a number')
+        exit()
+
+    if TENANT_ID == 'ANY_TENANT':
+        # No need to check/use TENANT_SERVICE_API_URL
+        TENANT_SERVICE_API_URL = None
+    else:
+        if 'TENANT_SERVICE_API_URL' in os.environ:
+            TENANT_SERVICE_API_URL = os.environ['TENANT_SERVICE_API_URL']
+        else:
+            print('TENANT_SERVICE_API_URL env var required')
+            exit()
+else:
+    TENANT_ID = 'ANY_TENANT'
+    TENANT_SERVICE_API_URL = None
 
 if 'VERBOSITY' in os.environ:
     if os.environ['VERBOSITY'] == 'DEBUG':
@@ -388,6 +410,7 @@ def process_ad_event(ad_event, scheduler, sch_events_by_key, aggr_ad_results_by_
 
 def aggregate_ad_events(key, scheduler, sch_events_by_key, aggr_ad_results_by_key, producer):
     global aggr_msg_cnt
+    global PARTITION_ID
 
     logger.debug('aggregate_ad_events(%s)' % (key))
     logger.info('Processing %s' % aggr_ad_results_by_key[key])
@@ -401,7 +424,10 @@ def aggregate_ad_events(key, scheduler, sch_events_by_key, aggr_ad_results_by_ke
         aggr_ad_results_csv = results.serialize()
         if producer is not None:
             logger.info('\x1b[1;31;40mSending msg #%d on topic %s\x1b[0m' % (aggr_msg_cnt, KAFKA_TOPIC_OUT))
-            producer.send(topic=KAFKA_TOPIC_OUT, key='AD-aggr-message-%d' % aggr_msg_cnt, value=aggr_ad_results_csv)
+            if TENANT_ID == 'ANY_TENANT':
+                producer.send(topic=KAFKA_TOPIC_OUT, key='AD-aggr-message-%d' % aggr_msg_cnt, value=aggr_ad_results_csv)
+            else:
+                producer.send(topic=KAFKA_TOPIC_OUT, key='AD-aggr-message-%d' % aggr_msg_cnt, value=aggr_ad_results_csv, partition=PARTITION_ID)
             aggr_msg_cnt += 1
         else:
             logger.debug('Kafka Producer not configured (missing KAFKA_TOPIC_OUT)')
@@ -419,6 +445,8 @@ if __name__ == "__main__":
     logger.info('AGGR_TIMEOUT = %d' % int(AGGR_TIMEOUT))
     logger.info('PROPAGATE_ONLY_WITH_AE_OR_IFOREST_FTRS = %s' % PROPAGATE_ONLY_WITH_AE_OR_IFOREST_FTRS)
     logger.info('EARLY_AGGREGATION = %s' % EARLY_AGGREGATION)
+    logger.info('TENANT_SERVICE_API_URL = %s' % TENANT_SERVICE_API_URL)
+    logger.info('TENANT_ID = %s' % TENANT_ID)
     if VERBOSITY == logging.DEBUG:
         logger.info('VERBOSITY = DEBUG')
     elif VERBOSITY == logging.INFO:
@@ -436,8 +464,23 @@ if __name__ == "__main__":
     aggr_ad_results_by_key = {}
     lock = threading.Lock()
     aggr_msg_cnt = 0
+    PARTITION_ID = None
 
-    consumer = build_kafka_consumer(KAFKA_BROKERS_CSV, KAFKA_TOPIC_IN, 'group_ADaggr', 'csv', 'csv')
+    if TENANT_ID == 'ANY_TENANT':
+        consumer = build_kafka_consumer(KAFKA_BROKERS_CSV, KAFKA_TOPIC_IN, 'group_ADaggr', 'csv', 'csv')
+    else:
+        try:
+            r = requests.get('%s/%s' % (TENANT_SERVICE_API_URL, TENANT_ID))
+            PARTITION_ID = r.json()['partition'] # int
+            logger.info('PARTITION_ID = %d' % PARTITION_ID)
+        except:
+            logger.error('Cannot retrieve PARTITION_ID for PARTITION_ID %s' % TENANT_ID)
+            traceback.print_exc()
+            exit()
+        # topic and group_id set to None, not compatible with assign()
+        consumer = build_kafka_consumer(KAFKA_BROKERS_CSV, None, None, 'csv', 'csv')
+        consumer.assign([TopicPartition(KAFKA_TOPIC_IN, PARTITION_ID)])
+    # Explicit partitions for KafkaProducer() are set in send() fx, no changes are needed here
     if KAFKA_TOPIC_OUT:
         producer = build_kafka_producer(KAFKA_BROKERS_CSV, 'csv', 'csv')
     else:

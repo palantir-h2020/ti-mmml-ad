@@ -1,3 +1,4 @@
 kafka-python
 numpy
 numba
+requests
