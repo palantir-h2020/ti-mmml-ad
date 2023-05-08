@@ -11,9 +11,9 @@ if [[ $(kubectl get pods --all-namespaces | grep ad-aggregator | wc -l) -gt 0 ]]
 fi
 
 echo "Creating AD_aggregator pod"
-# Any tenant
+# Use any partition
 kubectl create -f ${AD_aggregator_DIR}/pod.yaml
-# Tenant 1
+# Use only the partition assigned to tenant 1
 # sed -e 's|ANY_TENANT|1|g' ${AD_aggregator_DIR}/pod.yaml | kubectl create -f -
 
 echo "Waiting for AD_aggregator pod startup"
