@@ -15,6 +15,7 @@ echo "Creating MIDAS pod"
 kubectl create -f ${MIDAS_DIR}/pod.yaml
 # Use only the partition assigned to tenant 1
 # sed -e 's|ANY_TENANT|1|g' ${MIDAS_DIR}/pod.yaml | kubectl create -f -
+# TODO add volume for persistent storage
 
 echo "Waiting for MIDAS pod startup"
 while [[ $(kubectl get pods --all-namespaces | grep midas | grep Running | wc -l) -eq 0 ]]; do
