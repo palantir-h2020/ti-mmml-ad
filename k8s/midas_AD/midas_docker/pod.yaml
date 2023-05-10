@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: midas
+  name: midas-pod
 spec:
   restartPolicy: OnFailure
   containers:
@@ -29,5 +29,14 @@ spec:
         # Periodic re-training parameters
         - name: RETRAINING_PERIOD
           value: "0"
-        ### OpenSearch endpoint
-        ### OpenSearch user/password
+        - name: OPENSEARCH_API_URL
+          value: "https://10.101.41.42:9200"
+        - name: OPENSEARCH_API_AUTH
+          value: "admin:admin"
+      volumeMounts:
+        - name: midas-volume
+          mountPath: /midas_volume
+  volumes:
+    - name: midas-volume
+      hostPath:
+        path: /media/palantir-nfs/NEC/volumes/midas

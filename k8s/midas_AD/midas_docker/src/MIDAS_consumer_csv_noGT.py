@@ -48,12 +48,26 @@ if 'MIDAS_THR' in os.environ:
 else:
     MIDAS_THR = None
 
+if 'OPENSEARCH_API_URL' in os.environ:
+    OPENSEARCH_API_URL = os.environ['OPENSEARCH_API_URL']
+else:
+    OPENSEARCH_API_URL = None
+
+if 'OPENSEARCH_API_AUTH' in os.environ:
+    OPENSEARCH_API_AUTH = os.environ['OPENSEARCH_API_AUTH']
+else:
+    OPENSEARCH_API_AUTH = None
+
 if 'RETRAINING_PERIOD' in os.environ:
     RETRAINING_PERIOD = os.environ['RETRAINING_PERIOD']
     try:
         RETRAINING_PERIOD = int(RETRAINING_PERIOD)
     except ValueError:
         logging.error('Invalid RETRAINING_PERIOD value:', RETRAINING_PERIOD)
+        exit()
+
+    if OPENSEARCH_API_URL is None or OPENSEARCH_API_AUTH is None:
+        logging.error('Both OPENSEARCH_API_URL and OPENSEARCH_API_AUTH are required for periodic re-training')
         exit()
 else:
     RETRAINING_PERIOD = 0
@@ -89,7 +103,20 @@ else:
     TENANT_ID = 'ANY_TENANT'
     TENANT_SERVICE_API_URL = None
 
-STORED_MIDAS_THR = None
+if TENANT_ID == 'ANY_TENANT':
+    STORED_MIDAS_THR_FNAME = '/midas_volume/MIDAS_THR.MIDAS_SLOT_%s.ANY_TENANT.thr' % (MIDAS_SLOT)
+    STORED_MIDAS_THR_TS_FNAME = '/midas_volume/MIDAS_THR.MIDAS_SLOT_%s.ANY_TENANT.ts' % (MIDAS_SLOT)
+else:
+    STORED_MIDAS_THR_FNAME = '/midas_volume/MIDAS_THR.MIDAS_SLOT_%s.TENANT_ID_%s.thr' % (MIDAS_SLOT, TENANT_ID)
+    STORED_MIDAS_THR_TS_FNAME = '/midas_volume/MIDAS_THR.MIDAS_SLOT_%s.TENANT_ID_%s.ts' % (MIDAS_SLOT, TENANT_ID)
+if os.path.isfile(STORED_MIDAS_THR_FNAME) and os.path.isfile(STORED_MIDAS_THR_TS_FNAME):
+    with open(STORED_MIDAS_THR_FNAME, 'r') as f:
+        STORED_MIDAS_THR = f.read().strip()
+    with open(STORED_MIDAS_THR_TS_FNAME, 'r') as f:
+        STORED_MIDAS_THR_TS = f.read().strip()
+else:
+    STORED_MIDAS_THR = None
+    STORED_MIDAS_THR_TS = None
 # TODO read STORED_MIDAS_THR from persistent storage, if available (name of volume/file should take into account slot size and tenant ID!)
 # TODO create a midas_k8s_clean_volumes.sh to erase the persistent storage for a clen start of MIDAS
 
@@ -323,10 +350,14 @@ def periodic_retraining_thread_fx(curr_midas):
         # Update score_thr in the main MIDAS instance
         # (we do not need a Lock because the main thread created the instance and then only read score_thr, with no more updates)
         curr_midas.score_thr = new_threshold
-        logger.info('Updating MIDAS threshold %d -> %d' % (curr_threshold, new_threshold))
+        new_ts = '%s' % (datetime.now())
+        logger.info('Updating MIDAS threshold %d -> %d (%s)' % (curr_threshold, new_threshold, new_ts))
         del scores
         # Update threshold in persistent storage
-        # TODO
+        with open(STORED_MIDAS_THR_FNAME, 'w') as f:
+            f.write('%s' % (new_threshold))
+        with open(STORED_MIDAS_THR_TS_FNAME, 'w') as f:
+            f.write(new_ts)
 
 if __name__ == "__main__":
     logger.info('# Kafka parameters')
@@ -340,10 +371,12 @@ if __name__ == "__main__":
     logger.info('# MIDAS parameters')
     logger.info('MIDAS_SLOT = %s' % MIDAS_SLOT)
     logger.info('MIDAS_THR = %s' % MIDAS_THR)
-    logger.info('STORED_MIDAS_THR = %s' % STORED_MIDAS_THR)
+    logger.info('STORED_MIDAS_THR_FNAME = %s' % STORED_MIDAS_THR_FNAME)
+    logger.info('STORED_MIDAS_THR = %s (%s)' % (STORED_MIDAS_THR, STORED_MIDAS_THR_TS))
     logger.info('# Periodic re-training parameters')
     logger.info('RETRAINING_PERIOD = %s' % RETRAINING_PERIOD)
-    logger.info('[!] TODO others')
+    logger.info('OPENSEARCH_API_URL = %s' % OPENSEARCH_API_URL)
+    logger.info('OPENSEARCH_API_AUTH = %s' % OPENSEARCH_API_AUTH)
     logger.info('# Other parameters')
     logger.info('PROPAGATE_ANOMALIES_ONLY = %s' % PROPAGATE_ANOMALIES_ONLY)
     if VERBOSITY == logging.DEBUG:
@@ -375,6 +408,7 @@ if __name__ == "__main__":
         consumer = build_kafka_consumer(KAFKA_BROKERS_CSV, KAFKA_TOPIC_IN, 'group_%s' % midas.name, 'csv', 'csv')
     else:
         try:
+            logger.info('HTTP GET %s/%s' % (TENANT_SERVICE_API_URL, TENANT_ID))
             r = requests.get('%s/%s' % (TENANT_SERVICE_API_URL, TENANT_ID))
             PARTITION_ID = r.json()['partition'] # int
             logger.info('PARTITION_ID = %d' % PARTITION_ID)
