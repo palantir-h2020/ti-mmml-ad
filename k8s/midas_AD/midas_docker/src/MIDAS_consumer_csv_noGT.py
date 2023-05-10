@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from collections import namedtuple
 import ipaddress
 import numpy as np
+from opensearchpy import OpenSearch
 import os
 import requests
 import sys
@@ -72,6 +73,8 @@ if 'RETRAINING_PERIOD' in os.environ:
 else:
     RETRAINING_PERIOD = 0
 
+# TODO handle RETRAINING_DATA_HORIZON
+
 if 'PROPAGATE_ANOMALIES_ONLY' in os.environ:
     PROPAGATE_ANOMALIES_ONLY = os.environ['PROPAGATE_ANOMALIES_ONLY']
     if PROPAGATE_ANOMALIES_ONLY == 'True':
@@ -117,8 +120,13 @@ if os.path.isfile(STORED_MIDAS_THR_FNAME) and os.path.isfile(STORED_MIDAS_THR_TS
 else:
     STORED_MIDAS_THR = None
     STORED_MIDAS_THR_TS = None
-# TODO read STORED_MIDAS_THR from persistent storage, if available (name of volume/file should take into account slot size and tenant ID!)
-# TODO create a midas_k8s_clean_volumes.sh to erase the persistent storage for a clen start of MIDAS
+
+if TENANT_ID == 'ANY_TENANT':
+    OPENSEARCH_INDEX = 'netflow-preprocessed-index-new'
+else:
+    OPENSEARCH_INDEX = 'netflow-preprocessed-index-new'
+    # TODO once index name has been clarified!
+    # OPENSEARCH_INDEX = 'netflow-preprocessed-index-new.%s' % (TENANT_ID)
 
 if 'VERBOSITY' in os.environ:
     if os.environ['VERBOSITY'] == 'DEBUG':
@@ -254,6 +262,22 @@ def proc_msg(data, midas, producer):
     if producer:
         send_alert(data_dict, score, midas, producer, is_anomalous)
 
+def proc_opensearch_raw_data(data):
+    # CSV-to-dict
+    data_split = data.split(',')
+    data_split_len = len(data_split)
+    if data_split_len not in valid_netflow_cnt_values:
+        return None
+
+    # timestamp, source and destination have same position in both netflow-raw and netflow-anonymized-preprocessed
+    data_dict = {'timestamp': data_split[0],
+                 'source': data_split[3],
+                 'destination': data_split[4],
+                }
+
+    # include parsed timestamp as datetime to enable sorting afterwards
+    return [parse_cic_ids_ts(data_dict['timestamp']), data_dict]
+
 def init_midas(slot, thr, stored_thr):
     midas = namedtuple('MIDAS', [])
     midas.core = FilteringCore(2, 1024, 1e3)
@@ -321,29 +345,79 @@ def init_midas(slot, thr, stored_thr):
 
     return midas
 
+def get_historical_data_from_opensearch():
+    OPENSEARCH_API_HOST = OPENSEARCH_API_URL.split(':')[0]
+    OPENSEARCH_API_PORT = OPENSEARCH_API_URL.split(':')[1]
+    client = OpenSearch(
+        hosts = [{'host': OPENSEARCH_API_HOST, 'port': OPENSEARCH_API_PORT}],
+        http_compress = True,
+        http_auth = OPENSEARCH_API_AUTH.split(':'),
+        use_ssl = True,
+        verify_certs = False,
+        ssl_show_warn = False
+    )
+
+    query = {}
+    response = client.count(
+        body = query,
+        index = OPENSEARCH_INDEX
+    )
+    logger.info('%s documents found in index \'%s\'' % (response['count'], OPENSEARCH_INDEX))
+    print()
+
+    # TODO filter by date based on RETRAINING_DATA_HORIZON (no need to sort here, done afterwards in any case)
+    query = {
+        'size': 100
+    }
+    response = client.search(
+        body = query,
+        index = OPENSEARCH_INDEX
+    )
+
+    if 'hits' in response and 'hits' in response['hits']:
+        results = response['hits']['hits']
+    else:
+        logger.error()
+        return []
+
+    parsed_results = []
+    for r in results:
+        if not ('_source' in r and 'network' in r['_source'] and 'raw' in r['_source']['network']):
+            continue
+        raw_data = r['_source']['network']['raw']
+        parsed_result = proc_opensearch_raw_data(raw_data)
+        if parsed_result is not None:
+            parsed_results.append( parsed_result )
+
+    return parsed_results
+
 def periodic_retraining_thread_fx(curr_midas):
     logger.info('...done!')
     while True:
         logger.info('Waiting %d seconds...' % (RETRAINING_PERIOD))
         time.sleep(RETRAINING_PERIOD)
         logger.info('...starting periodic re-training.')
-        # Create a new MIDAS instance for re-training, with the same params
+
+        # Create a new MIDAS instance for re-training, with the same params of the main MIDAS instance
         logger.info('Creating support MIDAS instance...')
         midas_r = init_midas(MIDAS_SLOT, MIDAS_THR, STORED_MIDAS_THR)
-        # Read data from OpenSearch from the latest X days/months, pass it through MIDAS and store all the scores
-        scores = []
-        # TODO read from actual data!
-        for _ in range(5):
-            data_dict = {
-                'timestamp': '2017-07-05 10:40:00',
-                'source': '8.8.8.8',
-                'destination': '8.8.8.8'}
 
+        # Read data from OpenSearch from the latest X days/months, pass it through MIDAS and store all the scores
+        historical_data = get_historical_data_from_opensearch()
+        logger.info('OpenSearch returned %s results' % len(historical_data))
+        if len(historical_data) == 0:
+            logger.error('No results found: skipping re-training round!')
+            continue
+        scores = []
+        # sort historical_data by timestamp (very important for MIDAS, which implements a streaming algorithm!)
+        for r in sorted(historical_data, key=lambda x: x[0]):
+            data_dict = r[1]
             score = run_data_into_midas(midas_r, data_dict)
             if score is None:
                 continue
             # TODO we could use approximate computation of percentiles as a steaming algorithm to avoid storing ALL of them
             scores.append(score)
+
         # Compute the 99.999-th percentile
         curr_threshold = curr_midas.score_thr
         new_threshold = int(np.percentile(scores, 99.999))
@@ -351,7 +425,8 @@ def periodic_retraining_thread_fx(curr_midas):
         # (we do not need a Lock because the main thread created the instance and then only read score_thr, with no more updates)
         curr_midas.score_thr = new_threshold
         new_ts = '%s' % (datetime.now())
-        logger.info('Updating MIDAS threshold %d -> %d (%s)' % (curr_threshold, new_threshold, new_ts))
+        logger.info('min/avg/max MIDAS scores: %.1f/%.1f/%.1f' % (min(scores),np.average(scores),np.max(scores)))
+        logger.info('Updating MIDAS threshold %d -> %d (%s)%s' % (curr_threshold, new_threshold, new_ts, ' [NO CHANGES!]' if curr_threshold==new_threshold else ''))
         del scores
         # Update threshold in persistent storage
         with open(STORED_MIDAS_THR_FNAME, 'w') as f:
