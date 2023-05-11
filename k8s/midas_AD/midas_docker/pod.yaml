@@ -28,11 +28,13 @@ spec:
           value: "706206900"
         # Periodic re-training parameters
         - name: RETRAINING_PERIOD
-          value: "0" # DISABLED
+          # value: "0" # DISABLED
+          # value: "15" # 15 seconds
           # value: "30" # 30 seconds
+          value: "86400" # 1 day (60*60*24 = 86400 seconds)
           # value: "2678400" # 1 month (60*60*24*31 = 2678400 seconds)
         - name: RETRAINING_DATA_HORIZON
-          value: "0" # TODO!
+          value: "30d" # 30d = last 30 days
         - name: OPENSEARCH_API_URL
           value: "10.101.41.42:9200"
         - name: OPENSEARCH_API_AUTH

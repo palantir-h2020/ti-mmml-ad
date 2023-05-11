@@ -73,7 +73,10 @@ if 'RETRAINING_PERIOD' in os.environ:
 else:
     RETRAINING_PERIOD = 0
 
-# TODO handle RETRAINING_DATA_HORIZON
+if 'RETRAINING_DATA_HORIZON' in os.environ:
+    RETRAINING_DATA_HORIZON = os.environ['RETRAINING_DATA_HORIZON']
+else:
+    RETRAINING_DATA_HORIZON = '30d'
 
 if 'PROPAGATE_ANOMALIES_ONLY' in os.environ:
     PROPAGATE_ANOMALIES_ONLY = os.environ['PROPAGATE_ANOMALIES_ONLY']
@@ -124,9 +127,9 @@ else:
 if TENANT_ID == 'ANY_TENANT':
     OPENSEARCH_INDEX = 'netflow-preprocessed-index-new'
 else:
-    OPENSEARCH_INDEX = 'netflow-preprocessed-index-new'
-    # TODO once index name has been clarified!
+    # TODO once index name with multiple tenants has been clarified!
     # OPENSEARCH_INDEX = 'netflow-preprocessed-index-new.%s' % (TENANT_ID)
+    OPENSEARCH_INDEX = 'netflow-preprocessed-index-new'
 
 if 'VERBOSITY' in os.environ:
     if os.environ['VERBOSITY'] == 'DEBUG':
@@ -267,6 +270,7 @@ def proc_opensearch_raw_data(data):
     data_split = data.split(',')
     data_split_len = len(data_split)
     if data_split_len not in valid_netflow_cnt_values:
+        logger.error('NetFlow raw data has invalid length (%d)' % (data_split_len))
         return None
 
     # timestamp, source and destination have same position in both netflow-raw and netflow-anonymized-preprocessed
@@ -275,8 +279,7 @@ def proc_opensearch_raw_data(data):
                  'destination': data_split[4],
                 }
 
-    # include parsed timestamp as datetime to enable sorting afterwards
-    return [parse_cic_ids_ts(data_dict['timestamp']), data_dict]
+    return data_dict
 
 def init_midas(slot, thr, stored_thr):
     midas = namedtuple('MIDAS', [])
@@ -345,7 +348,7 @@ def init_midas(slot, thr, stored_thr):
 
     return midas
 
-def get_historical_data_from_opensearch():
+def get_opensearch_client():
     OPENSEARCH_API_HOST = OPENSEARCH_API_URL.split(':')[0]
     OPENSEARCH_API_PORT = OPENSEARCH_API_URL.split(':')[1]
     client = OpenSearch(
@@ -357,18 +360,70 @@ def get_historical_data_from_opensearch():
         ssl_show_warn = False
     )
 
-    query = {}
+    return client
+
+def get_opensearch_query():
+    query = {
+        "version": "true",
+        "size": 1000, # max 10000 (https://opensearch.org/docs/1.1/opensearch/ux/#scroll-search)
+        "sort": [
+            {
+            "netflow.exporter.timestamp": {
+                "order": "asc",
+                "unmapped_type": "boolean"
+            }
+            }
+        ],
+        "aggs": {
+            "2": {
+            "date_histogram": {
+                "field": "netflow.exporter.timestamp",
+                "fixed_interval": "12h",
+                "time_zone": "Europe/Athens",
+                "min_doc_count": 1
+            }
+            }
+        },
+        "docvalue_fields": [
+            {
+            "field": "netflow.exporter.timestamp",
+            "format": "date_time"
+            }
+        ],
+        "query": {
+            "bool": {
+            "filter": [
+                {
+                "match_all": {}
+                },
+                {
+                "range": {
+                    "netflow.exporter.timestamp": {
+                    "gte": "now-%s" % RETRAINING_DATA_HORIZON,
+                    "format": "strict_date_optional_time"
+                    }
+                }
+                }
+            ]
+            }
+        }
+    }
+
+    return query
+
+# A single query can retrieve at most 10k documents
+# https://opensearch.org/docs/1.1/opensearch/ux/#scroll-search
+def get_historical_data_from_opensearch_unbatched(midas_r):
+    client = get_opensearch_client()
+
+    query_cnt = {}
     response = client.count(
-        body = query,
+        body = query_cnt,
         index = OPENSEARCH_INDEX
     )
     logger.info('%s documents found in index \'%s\'' % (response['count'], OPENSEARCH_INDEX))
-    print()
 
-    # TODO filter by date based on RETRAINING_DATA_HORIZON (no need to sort here, done afterwards in any case)
-    query = {
-        'size': 100
-    }
+    query = get_opensearch_query()
     response = client.search(
         body = query,
         index = OPENSEARCH_INDEX
@@ -377,24 +432,88 @@ def get_historical_data_from_opensearch():
     if 'hits' in response and 'hits' in response['hits']:
         results = response['hits']['hits']
     else:
-        logger.error()
-        return []
+        logger.error('Cannot retrieve hits')
+        return None
 
-    parsed_results = []
+    scores = []
     for r in results:
         if not ('_source' in r and 'network' in r['_source'] and 'raw' in r['_source']['network']):
             continue
         raw_data = r['_source']['network']['raw']
-        parsed_result = proc_opensearch_raw_data(raw_data)
-        if parsed_result is not None:
-            parsed_results.append( parsed_result )
+        data_dict = proc_opensearch_raw_data(raw_data)
+        if data_dict is not None:
+            score = run_data_into_midas(midas_r, data_dict)
+            if score is not None:
+                # TODO we could use approximate computation of percentiles as a steaming algorithm to avoid storing ALL of them
+                scores.append(score)
 
-    return parsed_results
+    return scores
+
+def get_historical_data_from_opensearch_batched(midas_r):
+    client = get_opensearch_client()
+
+    query_cnt = {}
+    response = client.count(
+        body = query_cnt,
+        index = OPENSEARCH_INDEX
+    )
+    logger.info('%s documents found in index \'%s\'' % (response['count'], OPENSEARCH_INDEX))
+
+    query = get_opensearch_query()
+    query["size"] = 1000 # Set batch size
+    scroll_id = None
+    scores = []
+    while True:
+        if scroll_id is None:
+            response = client.search(
+                body = query,
+                index = OPENSEARCH_INDEX,
+                scroll='30s'
+            )
+            if '_scroll_id' not in response:
+                logger.error('Cannot retrieve scroll_id')
+                return None
+            scroll_id = response['_scroll_id']
+            logger.info('scroll_id: %s' % scroll_id)
+        else:
+            response = client.scroll(
+                scroll_id=scroll_id,
+                scroll='30s'
+            )
+
+        if 'hits' in response and 'hits' in response['hits']:
+            results = response['hits']['hits']
+        else:
+            logger.error('Cannot retrieve hits')
+            return None
+
+        if len(results) == 0:
+            logger.info('End of results')
+            break
+        logger.info('Retrieved %d records in the current batch' % (len(results)))
+
+        for r in results:
+            if not ('_source' in r and 'network' in r['_source'] and 'raw' in r['_source']['network']):
+                continue
+            raw_data = r['_source']['network']['raw']
+            data_dict = proc_opensearch_raw_data(raw_data)
+            if data_dict is not None:
+                score = run_data_into_midas(midas_r, data_dict)
+                if score is not None:
+                    # TODO we could use approximate computation of percentiles as a steaming algorithm to avoid storing ALL of them
+                    scores.append(score)
+
+        # DEL ME (used to compare get_historical_data_from_opensearch_unbatched vs get_historical_data_from_opensearch_batched)
+        # if len(scores) >= 1000:
+        #     logger.info('Reached 1000 results: Exiting...')
+        #     break
+
+    return scores
 
 def periodic_retraining_thread_fx(curr_midas):
     logger.info('...done!')
     while True:
-        logger.info('Waiting %d seconds...' % (RETRAINING_PERIOD))
+        logger.info('Waiting %d seconds until %s...' % (RETRAINING_PERIOD, datetime.now() + timedelta(seconds=RETRAINING_PERIOD)))
         time.sleep(RETRAINING_PERIOD)
         logger.info('...starting periodic re-training.')
 
@@ -402,32 +521,27 @@ def periodic_retraining_thread_fx(curr_midas):
         logger.info('Creating support MIDAS instance...')
         midas_r = init_midas(MIDAS_SLOT, MIDAS_THR, STORED_MIDAS_THR)
 
-        # Read data from OpenSearch from the latest X days/months, pass it through MIDAS and store all the scores
-        historical_data = get_historical_data_from_opensearch()
-        logger.info('OpenSearch returned %s results' % len(historical_data))
-        if len(historical_data) == 0:
-            logger.error('No results found: skipping re-training round!')
+        # Read data from OpenSearch from the latest RETRAINING_DATA_HORIZON days/months, pass it through MIDAS and get all the scores
+        try:
+            historical_scores = get_historical_data_from_opensearch_batched(midas_r)
+        except Exception as e:
+            logger.error('%s.%s exception occurred in get_historical_data_from_opensearch_batched(): skipping current re-training round!' % (type(e).__module__,type(e).__name__))
             continue
-        scores = []
-        # sort historical_data by timestamp (very important for MIDAS, which implements a streaming algorithm!)
-        for r in sorted(historical_data, key=lambda x: x[0]):
-            data_dict = r[1]
-            score = run_data_into_midas(midas_r, data_dict)
-            if score is None:
-                continue
-            # TODO we could use approximate computation of percentiles as a steaming algorithm to avoid storing ALL of them
-            scores.append(score)
+        if historical_scores is None or len(historical_scores)==0:
+            logger.error('No results found: skipping current re-training round!')
+            continue
+        logger.info('Retrieved %d historical records' % (len(historical_scores)))
 
         # Compute the 99.999-th percentile
         curr_threshold = curr_midas.score_thr
-        new_threshold = int(np.percentile(scores, 99.999))
+        new_threshold = int(np.percentile(historical_scores, 99.999))
         # Update score_thr in the main MIDAS instance
-        # (we do not need a Lock because the main thread created the instance and then only read score_thr, with no more updates)
+        # (we do not need a Lock because the main thread created the instance and then only reads score_thr, with no more writes)
         curr_midas.score_thr = new_threshold
         new_ts = '%s' % (datetime.now())
-        logger.info('min/avg/max MIDAS scores: %.1f/%.1f/%.1f' % (min(scores),np.average(scores),np.max(scores)))
+        logger.info('min/avg/max MIDAS historical_scores: %.1f/%.1f/%.1f' % (min(historical_scores),np.average(historical_scores),np.max(historical_scores)))
         logger.info('Updating MIDAS threshold %d -> %d (%s)%s' % (curr_threshold, new_threshold, new_ts, ' [NO CHANGES!]' if curr_threshold==new_threshold else ''))
-        del scores
+        del historical_scores
         # Update threshold in persistent storage
         with open(STORED_MIDAS_THR_FNAME, 'w') as f:
             f.write('%s' % (new_threshold))
@@ -450,6 +564,7 @@ if __name__ == "__main__":
     logger.info('STORED_MIDAS_THR = %s (%s)' % (STORED_MIDAS_THR, STORED_MIDAS_THR_TS))
     logger.info('# Periodic re-training parameters')
     logger.info('RETRAINING_PERIOD = %s' % RETRAINING_PERIOD)
+    logger.info('RETRAINING_DATA_HORIZON = %s' % RETRAINING_DATA_HORIZON)
     logger.info('OPENSEARCH_API_URL = %s' % OPENSEARCH_API_URL)
     logger.info('OPENSEARCH_API_AUTH = %s' % OPENSEARCH_API_AUTH)
     logger.info('# Other parameters')
