@@ -460,7 +460,7 @@ def get_historical_data_from_opensearch_batched(midas_r):
     logger.info('%s documents found in index \'%s\'' % (response['count'], OPENSEARCH_INDEX))
 
     query = get_opensearch_query()
-    query["size"] = 1000 # Set batch size
+    query["size"] = 2000 # Set batch size
     scroll_id = None
     scores = []
     while True:

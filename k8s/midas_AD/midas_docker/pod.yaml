@@ -31,10 +31,10 @@ spec:
           # value: "0" # DISABLED
           # value: "15" # 15 seconds
           # value: "30" # 30 seconds
-          value: "86400" # 1 day (60*60*24 = 86400 seconds)
-          # value: "2678400" # 1 month (60*60*24*31 = 2678400 seconds)
+          # value: "86400" # 1 day (60*60*24 = 86400 seconds)
+          value: "2678400" # 1 month (60*60*24*31 = 2678400 seconds)
         - name: RETRAINING_DATA_HORIZON
-          value: "30d" # 30d = last 30 days
+          value: "31d" # 31d = last 31 days
         - name: OPENSEARCH_API_URL
           value: "10.101.41.42:9200"
         - name: OPENSEARCH_API_AUTH
