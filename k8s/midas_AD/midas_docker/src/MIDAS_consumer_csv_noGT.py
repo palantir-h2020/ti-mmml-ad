@@ -6,6 +6,7 @@ import ipaddress
 import numpy as np
 from opensearchpy import OpenSearch
 import os
+import re
 import requests
 import sys
 import threading
@@ -92,8 +93,9 @@ else:
 
 if 'TENANT_ID' in os.environ:
     TENANT_ID = os.environ['TENANT_ID']
-    if TENANT_ID != 'ANY_TENANT' and not TENANT_ID.isnumeric():
-        print('TENANT_ID env var must be either ANY_TENANT or a number')
+    r ='[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+    if TENANT_ID != 'ANY_TENANT' and re.fullmatch(r, TENANT_ID) is None:
+        print('TENANT_ID env var must be either ANY_TENANT or a %s string' % r)
         exit()
 
     if TENANT_ID == 'ANY_TENANT':
@@ -127,9 +129,7 @@ else:
 if TENANT_ID == 'ANY_TENANT':
     OPENSEARCH_INDEX = 'netflow-preprocessed-index-new'
 else:
-    # TODO once index name with multiple tenants has been clarified!
-    # OPENSEARCH_INDEX = 'netflow-preprocessed-index-new.%s' % (TENANT_ID)
-    OPENSEARCH_INDEX = 'netflow-preprocessed-index-new'
+    OPENSEARCH_INDEX = 'netflow-preprocessed-index-new.%s' % (TENANT_ID)
 
 if 'VERBOSITY' in os.environ:
     if os.environ['VERBOSITY'] == 'DEBUG':

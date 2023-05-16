@@ -6,6 +6,7 @@ from kafka import TopicPartition
 from kafka_utils import *
 import logging
 import os
+import re
 import requests
 import sched
 import threading
@@ -16,7 +17,8 @@ import time
 From https://confluence.i2cat.net/display/PAL/Data+and+Event+Streams+Definition
 
 -Input topic: netflow-ad-tba.csv (i.e. to-be-aggregated)
-CSV string: 62 NetFlow ftrs,MAD_module_name,MAD_module_input_ftrs,MAD_module_outlier_score,MAD_module_flag
+CSV string: 71 ftrs,MAD_module_name,MAD_module_input_ftrs,MAD_module_outlier_score,MAD_module_flag
+71 ftrs are: 62 NetFlow ftrs + 1 Zeek ftr + 8 SDA ftrs
 MAD_module_input_ftrs is a CSV list enclosed in double quoted square brackets (e.g. "[]" or "[0.1,0.3,...]")
 MAD_module_flag is 0 or 1
 
@@ -81,8 +83,9 @@ else:
 
 if 'TENANT_ID' in os.environ:
     TENANT_ID = os.environ['TENANT_ID']
-    if TENANT_ID != 'ANY_TENANT' and not TENANT_ID.isnumeric():
-        print('TENANT_ID env var must be either ANY_TENANT or a number')
+    r ='[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+    if TENANT_ID != 'ANY_TENANT' and re.fullmatch(r, TENANT_ID) is None:
+        print('TENANT_ID env var must be either ANY_TENANT or a %s string' % r)
         exit()
 
     if TENANT_ID == 'ANY_TENANT':
@@ -341,7 +344,7 @@ class AggrADresult():
 
     def serialize(self):
         csv_str_listed = []
-        # append ts,te,td,sa,da,sp,dp,pr,flg,stos,ipkt,ibyt NetFlow features
+        # append ts,te,td,sa,da,sp,dp,pr,flg,stos,ipkt,ibyt NetFlow features (12)
         csv_str_listed += self.netflow_ftrs[:9]
         csv_str_listed += self.netflow_ftrs[10:13]
 
