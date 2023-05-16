@@ -23,7 +23,7 @@ MAD_module_input_ftrs is a CSV list enclosed in double quoted square brackets (e
 MAD_module_flag is 0 or 1
 
 -Output topic: netflow-ad-out.csv (i.e. aggregated output)
-CSV string: 12 NetFlow ftrs,MIDAS_OS,MIDAS_ADF,AE_OS,AE_ADF,GANomaly_OS,GANomaly_ADF,IFOREST_OS,IFOREST_ADF,33 AE/IFOREST-specific ftrs
+CSV string: 12 NetFlow ftrs,MIDAS_OS,MIDAS_ADF,AE_OS,AE_ADF,GANomaly_OS,GANomaly_ADF,IFOREST_OS,IFOREST_ADF,ZEEKFLOW_OS,ZEEKFLOW_ADF,33 AE/IFOREST/ZEEKFLOW-specific ftrs
 The 12 NetFlow ftrs are ts,te,td,sa,da,sp,dp,pr,flg,stos,ipkt,ibyt
 MIDAS_OS,MIDAS_ADF are the outlier score and the anomaly detection flag (None,None if no result has been provided)
 '''
@@ -50,17 +50,18 @@ if 'AGGR_TIMEOUT' in os.environ:
 else:
     AGGR_TIMEOUT = 30
 
-if 'PROPAGATE_ONLY_WITH_AE_OR_IFOREST_FTRS' in os.environ:
-    if os.environ['PROPAGATE_ONLY_WITH_AE_OR_IFOREST_FTRS'] == 'True':
-        PROPAGATE_ONLY_WITH_AE_OR_IFOREST_FTRS = True
-    elif os.environ['PROPAGATE_ONLY_WITH_AE_OR_IFOREST_FTRS'] == 'False':
-        PROPAGATE_ONLY_WITH_AE_OR_IFOREST_FTRS = False
+if 'PROPAGATE_ONLY_WITH_33_TCAM_FTRS' in os.environ:
+    if os.environ['PROPAGATE_ONLY_WITH_33_TCAM_FTRS'] == 'True':
+        PROPAGATE_ONLY_WITH_33_TCAM_FTRS = True
+    elif os.environ['PROPAGATE_ONLY_WITH_33_TCAM_FTRS'] == 'False':
+        PROPAGATE_ONLY_WITH_33_TCAM_FTRS = False
     else:
-        print('PROPAGATE_ONLY_WITH_AE_OR_IFOREST_FTRS env var has invalid value')
+        print('PROPAGATE_ONLY_WITH_33_TCAM_FTRS env var has invalid value')
         exit()
 else:
-    PROPAGATE_ONLY_WITH_AE_OR_IFOREST_FTRS = True
+    PROPAGATE_ONLY_WITH_33_TCAM_FTRS = True
 
+# TODO add ZeekFlow?
 if 'EARLY_AGGREGATION' in os.environ:
     if os.environ['EARLY_AGGREGATION'] == 'ALL':
         EARLY_AGGREGATION = 'ALL'
@@ -145,8 +146,8 @@ class scheduler_with_polling(sched.scheduler):
 
 # Result of a single AD module
 class ADresult():
-    # TODO GANomaly-specific features count
-    ad_module_specific_ftr_cnt = {'AE': 33, 'GANomaly': 0, 'IFOREST': 33, 'MIDAS': 0}
+    # AE, IFOREST and ZEEKFLOW all share the same 33 features then used by TCAM's RF
+    ad_module_specific_ftr_cnt = {'AE': 33, 'GANomaly': 0, 'IFOREST': 33, 'MIDAS': 0, 'ZEEKFLOW': 33}
 
     def __init__(self, name, AD_data):
         self.name = name
@@ -187,7 +188,7 @@ class ADresult():
 
 # Aggregated results from multiple AD modules
 class AggrADresult():
-    mad_modules_names = ['MIDAS', 'AE', 'GANomaly', 'IFOREST'] # Fixed serialization order expected by TCAM, do not change!
+    mad_modules_names = ['MIDAS', 'AE', 'GANomaly', 'IFOREST', 'ZEEKFLOW'] # Fixed serialization order expected by TCAM, do not change!
     netflow_ftr_cnt_raw = 48 # netflow-raw
     netflow_ftr_cnt_anonym_preproc_wo_zeek_and_SDA = 62 # netflow-anonymized-preprocessed
     netflow_ftr_cnt_anonym_preproc = 62+1+8 # netflow-anonymized-preprocessed (62 NetFlow ftrs + 1 Zeek ftr + 8 SDA ftrs)
@@ -285,6 +286,7 @@ class AggrADresult():
 
         return d
 
+    # TODO add ZeekFlow?
     def early_aggregation_possible(self):
         if EARLY_AGGREGATION == 'ALL':
             if any(result is None for result in self.__all_AD_results()):
@@ -314,15 +316,15 @@ class AggrADresult():
     def shall_propagate_to_TCAM(self):
         # If at least one method detected an anomaly...
         if any(is_anomalous == '1' for is_anomalous in self.__all_AD_results__is_anomalous()):
-            if not PROPAGATE_ONLY_WITH_AE_OR_IFOREST_FTRS:
+            if not PROPAGATE_ONLY_WITH_33_TCAM_FTRS:
                 return True
             else:
-                if self.AE_result is not None or self.IFOREST_result is not None:
-                    # ... AND we have AE/IF features, we propagate
+                if self.AE_result is not None or self.IFOREST_result is not None or self.ZEEKFLOW_result is not None:
+                    # ... AND we have AE/IF/ZEEKFLOW features, we propagate
                     return True
                 else:
                     logger.debug('At least one MAD module detected an anomaly but no AE/IF features are available...')
-                    logger.debug('...and PROPAGATE_ONLY_WITH_AE_OR_IFOREST_FTRS=True.')
+                    logger.debug('...and PROPAGATE_ONLY_WITH_33_TCAM_FTRS=True.')
                     return False
 
         return False
@@ -348,7 +350,7 @@ class AggrADresult():
         csv_str_listed += self.netflow_ftrs[:9]
         csv_str_listed += self.netflow_ftrs[10:13]
 
-        # for each MIDAS/AE/GANomaly/IFOREST method append {score},{is_anomalous}
+        # for each MIDAS/AE/GANomaly/IFOREST/ZEEKFLOW method append {score},{is_anomalous}
         for name,r in zip(self.__all_AD_name(),
                           self.__all_AD_results()):
             if r is not None:
@@ -358,16 +360,18 @@ class AggrADresult():
 
         csv_str = ','.join(map(str, csv_str_listed))
 
-        # append AE or IF features
-        if self.AE_result is not None and self.IFOREST_result is not None:
-            csv_str += ',' + self.AE_result.ftrs
-        elif self.AE_result is not None and self.IFOREST_result is None:
-            csv_str += ',' + self.AE_result.ftrs
-        elif self.AE_result is None and self.IFOREST_result is not None:
-            csv_str += ',' + self.IFOREST_result.ftrs
+        # append AE or IF or ZEEKFLOW features
+        if self.AE_result is None and self.IFOREST_result is None and self.ZEEKFLOW_result is None:
+            logger.warning('Cannot append AE/IFOREST/ZEEKFLOW features (not found)...')
         else:
-            logger.warning('Cannot append AE/IFOREST features (not found)...')
-            pass
+            if self.AE_result is not None:
+                csv_str += ',' + self.AE_result.ftrs
+            elif self.IFOREST_result is not None:
+                csv_str += ',' + self.IFOREST_result.ftrs
+            elif self.ZEEKFLOW_result is not None:
+                csv_str += ',' + self.ZEEKFLOW_result.ftrs
+            else:
+                pass
 
         logger.debug(csv_str)
 
@@ -446,7 +450,7 @@ if __name__ == "__main__":
     logger.info('KAFKA_TOPIC_IN = %s' % KAFKA_TOPIC_IN)
     logger.info('KAFKA_TOPIC_OUT = %s' % KAFKA_TOPIC_OUT)
     logger.info('AGGR_TIMEOUT = %d' % int(AGGR_TIMEOUT))
-    logger.info('PROPAGATE_ONLY_WITH_AE_OR_IFOREST_FTRS = %s' % PROPAGATE_ONLY_WITH_AE_OR_IFOREST_FTRS)
+    logger.info('PROPAGATE_ONLY_WITH_33_TCAM_FTRS = %s' % PROPAGATE_ONLY_WITH_33_TCAM_FTRS)
     logger.info('EARLY_AGGREGATION = %s' % EARLY_AGGREGATION)
     logger.info('TENANT_SERVICE_API_URL = %s' % TENANT_SERVICE_API_URL)
     logger.info('TENANT_ID = %s' % TENANT_ID)
