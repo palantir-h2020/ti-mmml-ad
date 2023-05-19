@@ -230,13 +230,6 @@ class AggrADresult():
 
         return key
 
-    def __create_ADresult(self, name, AD_data):
-        try:
-            return ADresult(name, AD_data)
-        except Exception:
-            logger.error('%s AD result not stored' % name)
-            return None
-
     def add_single_AD_result(self, ad_event):
         ad_event_split = ad_event.split(',')
         if len(ad_event_split) < min(AggrADresult.netflow_ftr_cnt_raw, AggrADresult.netflow_ftr_cnt_anonym_preproc) + 1:
@@ -264,8 +257,13 @@ class AggrADresult():
         # ad_module_result = self.[ad_module_name]_result
         ad_module_result = getattr(self, '%s_result' % ad_module_name)
         if ad_module_result is None:
-            # self.[ad_module_name]_result = self.__create_ADresult(ad_module_name, ad_module_specific_data)
-            setattr(self, '%s_result' % ad_module_name, self.__create_ADresult(ad_module_name, ad_module_specific_data))
+            try:
+                ad_module_result_new = ADresult(ad_module_name, ad_module_specific_data)
+                # self.[ad_module_name]_result = ad_module_result_new
+                setattr(self, '%s_result' % ad_module_name, ad_module_result_new)
+            except Exception:
+                logger.error('%s AD result not stored' % ad_module_name)
+                return False
         else:
             logger.warning('%s AD score already received for this key' % ad_module_name)
 
