@@ -23,7 +23,7 @@ MAD_module_input_ftrs is a CSV list enclosed in double quoted square brackets (e
 MAD_module_flag is 0 or 1
 
 -Output topic: netflow-ad-out.csv (i.e. aggregated output)
-CSV string: 12 NetFlow ftrs,MIDAS_OS,MIDAS_ADF,AE_OS,AE_ADF,GANomaly_OS,GANomaly_ADF,IFOREST_OS,IFOREST_ADF,ZEEKFLOW_OS,ZEEKFLOW_ADF,33 AE/IFOREST/ZEEKFLOW-specific ftrs
+CSV string: 12 NetFlow ftrs,MIDAS_OS,MIDAS_ADF,AE_OS,AE_ADF,GANomaly_OS,GANomaly_ADF,IFOREST_OS,IFOREST_ADF,ZEEKFLOW_OS,ZEEKFLOW_ADF,33 AE/IFOREST-specific ftrs
 The 12 NetFlow ftrs are ts,te,td,sa,da,sp,dp,pr,flg,stos,ipkt,ibyt
 MIDAS_OS,MIDAS_ADF are the outlier score and the anomaly detection flag (None,None if no result has been provided)
 '''
@@ -146,8 +146,8 @@ class scheduler_with_polling(sched.scheduler):
 
 # Result of a single AD module
 class ADresult():
-    # AE, IFOREST and ZEEKFLOW all share the same 33 features then used by TCAM's RF
-    ad_module_specific_ftr_cnt = {'AE': 33, 'GANomaly': 0, 'IFOREST': 33, 'MIDAS': 0, 'ZEEKFLOW': 33}
+    # AE and IFOREST share the same 33 features then used by TCAM's RF
+    ad_module_specific_ftr_cnt = {'AE': 33, 'GANomaly': 0, 'IFOREST': 33, 'MIDAS': 0, 'ZEEKFLOW': 0}
 
     def __init__(self, name, AD_data):
         self.name = name
@@ -319,8 +319,8 @@ class AggrADresult():
             if not PROPAGATE_ONLY_WITH_33_TCAM_FTRS:
                 return True
             else:
-                if self.AE_result is not None or self.IFOREST_result is not None or self.ZEEKFLOW_result is not None:
-                    # ... AND we have AE/IF/ZEEKFLOW features, we propagate
+                if self.AE_result is not None or self.IFOREST_result is not None:
+                    # ... AND we have AE/IF features, we propagate
                     return True
                 else:
                     logger.debug('At least one MAD module detected an anomaly but no AE/IF features are available...')
@@ -360,16 +360,14 @@ class AggrADresult():
 
         csv_str = ','.join(map(str, csv_str_listed))
 
-        # append AE or IF or ZEEKFLOW features
-        if self.AE_result is None and self.IFOREST_result is None and self.ZEEKFLOW_result is None:
-            logger.warning('Cannot append AE/IFOREST/ZEEKFLOW features (not found)...')
+        # append AE or IF features
+        if self.AE_result is None and self.IFOREST_result is None:
+            logger.warning('Cannot append AE/IFOREST features (not found)...')
         else:
             if self.AE_result is not None:
                 csv_str += ',' + self.AE_result.ftrs
             elif self.IFOREST_result is not None:
                 csv_str += ',' + self.IFOREST_result.ftrs
-            elif self.ZEEKFLOW_result is not None:
-                csv_str += ',' + self.ZEEKFLOW_result.ftrs
             else:
                 pass
 
