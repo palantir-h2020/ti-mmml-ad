@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: midas-pod
+  namespace: "default"
 spec:
   restartPolicy: OnFailure
   containers:
@@ -18,7 +19,7 @@ spec:
           value: "netflow-ad-tba"
         # Kafka parameters for multi-tenancy
         - name: TENANT_SERVICE_API_URL
-          value: "http://10.101.41.42:6000/api/partition"
+          value: "http://tenant-api-service.ti-dcp:6000/api/partition"
         - name: TENANT_ID
           value: "ANY_TENANT"
         # MIDAS parameters
@@ -34,9 +35,10 @@ spec:
           # value: "86400" # 1 day (60*60*24 = 86400 seconds)
           value: "2678400" # 1 month (60*60*24*31 = 2678400 seconds)
         - name: RETRAINING_DATA_HORIZON
+          # https://opensearch.org/docs/latest/field-types/supported-field-types/date/#date-math
           value: "31d" # 31d = last 31 days
         - name: OPENSEARCH_API_URL
-          value: "10.101.41.42:9200"
+          value: "odfe-service.ti-dcp:9200"
         - name: OPENSEARCH_API_AUTH
           value: "admin:admin"
       volumeMounts:
