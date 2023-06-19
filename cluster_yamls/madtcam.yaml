@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: madtcam
+  namespace: "1000"
+  labels:
+        app: madtcam
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: madtcam
+  template:
+    metadata:
+      labels:
+        app: madtcam
+    spec:
+      nodeName: kube-worker3
+      containers:
+        - name: zeekflow
+          imagePullPolicy: Always
+          image: elaforestis/palantir
+          ports:
+            - containerPort: 80
+          env:
+            - name: ENTRY
+              value: "zeekflow/inference_ZeekFlow_kafka.py"
+            - name: TENANT_ID
+              value: "7476dde9-6bb8-4bab-b45c-0128da24aefc"
+            - name: KAFKA_BROKERS_CSV
+              value: "10.101.41.255:9092"
+        - name: iforest
+          image: elaforestis/palantir
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          env:
+            - name: ENTRY
+              value: "Netflow_outlier_detection_isolation_forest/distributed_netflow_inference(outlier_detection).py"
+
+            - name: TENANT_ID
+              value: "7476dde9-6bb8-4bab-b45c-0128da24aefc"
+            - name: KAFKA_BROKERS_CSV
+              value: "10.101.41.255:9092"
+        - name: rforest
+          imagePullPolicy: Always
+          image: elaforestis/palantir
+          ports:
+            - containerPort: 80
+          env:
+            - name: ENTRY
+              value: "Netflow_classifier_random_forest/distributed_netflow_inference(classifier).py"
+            - name: KAFKA_BROKERS_CSV
+              value: "10.101.41.255:9092"
+            - name: KAFKA_TOPIC_IN_SNORT2
+              value: "sc.generated_log.snort.1000"
+            - name: KAFKA_TOPIC_IN_SURICATA
+              value: "sc.generated_log.suricata.1000"
+            - name: KAFKA_TOPIC_IN_WAZUH
+              value: "sc.generated_log.wazuh.1000"
+            - name: KAFKA_TOPIC_OUT_NETFLOW
+              value: "ti.threat_findings_netflow"
+            - name: KAFKA_TOPIC_OUT_SYSLOG
+              value: "ti.threat_findings_syslog"
+            - name: VERBOSITY
+              value: "DEBUG"
+            - name: TENANT_ID
+              value: "7476dde9-6bb8-4bab-b45c-0128da24aefc"

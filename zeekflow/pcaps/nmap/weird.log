@@ -1,0 +1,13 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	weird
+#open	2022-10-10-10-13-17
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	name	addl	notice	peer	source
+#types	time	string	addr	port	addr	port	string	string	bool	string	string
+1665385050.469727	CJmefn2H7wbMaqohah	192.168.1.30	51968	192.168.1.254	443	bad_HTTP_request	-	F	zeek	HTTP
+1665385060.477073	CxGyMKKRxgtqaKhLc	192.168.1.30	48584	192.168.1.254	53	DNS_truncated_len_lt_hdr_len	-	F	zeek	DNS
+1665385061.791872	CO02U61Dup4CeUFeSa	192.168.1.30	51996	192.168.1.254	443	bad_HTTP_request	-	F	zeek	HTTP
+1665385062.397311	CDurAuyhonDS42jck	192.168.1.30	39728	192.168.1.254	80	unknown_HTTP_method	TDVN	F	zeek	-
+#close	2022-10-10-10-13-17

@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: madzeekflow
+  namespace: "1000"
+  labels:
+        app: madzeekflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: madzeekflow
+  template:
+    metadata:
+      labels:
+        app: madzeekflow
+    spec:
+      nodeName: kube-worker3
+      containers:
+        - name: zeekflow
+          imagePullPolicy: Always
+          image: elaforestis/palantir
+          ports:
+            - containerPort: 80
+          env:
+            - name: ENTRY
+              value: "zeekflow/inference_ZeekFlow_kafka.py"
+            - name: TENANT_ID
+              value: "7476dde9-6bb8-4bab-b45c-0128da24aefc"
+            - name: KAFKA_BROKERS_CSV
+              value: "10.101.41.255:9092"

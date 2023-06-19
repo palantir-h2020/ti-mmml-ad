@@ -1,0 +1,27 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	files
+#open	2022-10-10-10-12-56
+#fields	ts	fuid	tx_hosts	rx_hosts	conn_uids	source	depth	analyzers	mime_type	filename	duration	local_orig	is_orig	seen_bytes	total_bytes	missing_bytes	overflow_bytes	timedout	parent_fuid	md5	sha1	sha256	extracted	extracted_cutoff	extracted_size
+#types	time	string	set[addr]	set[addr]	set[string]	string	count	set[string]	string	string	interval	bool	bool	count	count	count	count	bool	string	string	string	string	string	bool	count
+1665385168.479400	Fkl4ui4KQbLcJHWZGh	192.168.1.30	172.217.17.99	CxOeSORU4pWpEZrY8	HTTP	0	(empty)	application/ocsp-request	-	0.000000	-	T	83	83	0	0	F	-	-	-	-	-	-	-
+1665385168.627372	Fup9MuzUuaujbGqCd	172.217.17.99	192.168.1.30	CxOeSORU4pWpEZrY8	HTTP	0	(empty)	application/ocsp-response	-	0.000000	-	F	471	471	0	0	F	-	-	-	-	-	-	-
+1665385168.810683	F4EZUTfWIQkxWeVhh	192.168.1.30	172.217.17.99	CxOeSORU4pWpEZrY8	HTTP	0	(empty)	application/ocsp-request	-	0.000000	-	T	83	83	0	0	F	-	-	-	-	-	-	-
+1665385168.891456	FTu32r1bpX2tzS3JEg	172.217.17.99	192.168.1.30	CxOeSORU4pWpEZrY8	HTTP	0	(empty)	application/ocsp-response	-	0.000000	-	F	471	471	0	0	F	-	-	-	-	-	-	-
+1665385170.778257	Fz49Fy3gNnM2CuuaEa	192.168.1.30	172.217.17.99	CxOeSORU4pWpEZrY8	HTTP	0	(empty)	application/ocsp-request	-	0.000000	-	T	84	84	0	0	F	-	-	-	-	-	-	-
+1665385170.905186	FW6Qa22dVWC9nyozua	192.168.1.30	172.217.17.99	CYYyPk1wUMlYtm03Q	HTTP	0	(empty)	application/ocsp-request	-	0.000000	-	T	84	84	0	0	F	-	-	-	-	-	-	-
+1665385170.905215	FqylS51bc7ReBytxu4	192.168.1.30	172.217.17.99	CqtQTm3HjTPqzaxrFh	HTTP	0	(empty)	application/ocsp-request	-	0.000000	-	T	84	84	0	0	F	-	-	-	-	-	-	-
+1665385170.924230	FSOhTNbmcJkK7GQDg	192.168.1.30	172.217.17.99	CABwgk1NGpDAiOnWx4	HTTP	0	(empty)	application/ocsp-request	-	0.000000	-	T	84	84	0	0	F	-	-	-	-	-	-	-
+1665385170.924323	FUP0x44clyXO4AvHM1	192.168.1.30	172.217.17.99	CdlzzL2aVVP7Q1LVQ9	HTTP	0	(empty)	application/ocsp-request	-	0.000000	-	T	84	84	0	0	F	-	-	-	-	-	-	-
+1665385170.969029	Fz9vb938KlwW6wSf1b	172.217.17.99	192.168.1.30	CxOeSORU4pWpEZrY8	HTTP	0	(empty)	application/ocsp-response	-	0.000000	-	F	472	472	0	0	F	-	-	-	-	-	-	-
+1665385171.090310	FyuFi32jTBcr9hNlti	172.217.17.99	192.168.1.30	CYYyPk1wUMlYtm03Q	HTTP	0	(empty)	application/ocsp-response	-	0.000000	-	F	472	472	0	0	F	-	-	-	-	-	-	-
+1665385171.090501	FMKXzf4yRwgp7R5SF9	172.217.17.99	192.168.1.30	CqtQTm3HjTPqzaxrFh	HTTP	0	(empty)	application/ocsp-response	-	0.000000	-	F	472	472	0	0	F	-	-	-	-	-	-	-
+1665385171.090511	Fz7cYb2xEtYtOoqhrh	172.217.17.99	192.168.1.30	CABwgk1NGpDAiOnWx4	HTTP	0	(empty)	application/ocsp-response	-	0.000000	-	F	472	472	0	0	F	-	-	-	-	-	-	-
+1665385171.090689	FuZCb50VBHFbv1Ab2	172.217.17.99	192.168.1.30	CdlzzL2aVVP7Q1LVQ9	HTTP	0	(empty)	application/ocsp-response	-	0.000000	-	F	472	472	0	0	F	-	-	-	-	-	-	-
+1665385171.851504	FXg2nr0cEZnJ7G6J7	192.168.1.30	172.217.17.99	CxOeSORU4pWpEZrY8	HTTP	0	(empty)	application/ocsp-request	-	0.000000	-	T	84	84	0	0	F	-	-	-	-	-	-	-
+1665385171.856497	Fue8WM3KEtFnca4Vv5	192.168.1.30	172.217.17.99	CYYyPk1wUMlYtm03Q	HTTP	0	(empty)	application/ocsp-request	-	0.000000	-	T	84	84	0	0	F	-	-	-	-	-	-	-
+1665385171.941459	FcuACJ1sXwZs2TfCAi	172.217.17.99	192.168.1.30	CxOeSORU4pWpEZrY8	HTTP	0	(empty)	application/ocsp-response	-	0.000000	-	F	472	472	0	0	F	-	-	-	-	-	-	-
+1665385171.941547	F8bADHgWKAt9dDT69	172.217.17.99	192.168.1.30	CYYyPk1wUMlYtm03Q	HTTP	0	(empty)	application/ocsp-response	-	0.000000	-	F	472	472	0	0	F	-	-	-	-	-	-	-
+#close	2022-10-10-10-12-56

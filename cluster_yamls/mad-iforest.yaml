@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: madiforest
+  namespace: "1000"
+  labels:
+        app: madiforest
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: madiforest
+  template:
+    metadata:
+      labels:
+        app: madiforest
+    spec:
+      nodeName: kube-worker3
+      containers:
+        - name: iforest
+          image: elaforestis/palantir
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          env:
+            - name: ENTRY
+              value: "Netflow_outlier_detection_isolation_forest/distributed_netflow_inference(outlier_detection).py"
+
+            - name: TENANT_ID
+              value: "7476dde9-6bb8-4bab-b45c-0128da24aefc"
+            - name: KAFKA_BROKERS_CSV
+              value: "10.101.41.255:9092"

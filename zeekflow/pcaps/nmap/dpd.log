@@ -1,0 +1,13 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	dpd
+#open	2022-10-10-10-13-17
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	proto	analyzer	failure_reason
+#types	time	string	addr	port	addr	port	enum	string	string
+1665385050.469727	CJmefn2H7wbMaqohah	192.168.1.30	51968	192.168.1.254	443	tcp	SSL	Invalid version late in TLS connection. Packet reported version: 21588
+1665385061.713225	CO02U61Dup4CeUFeSa	192.168.1.30	51996	192.168.1.254	443	tcp	SSL	Invalid version in TLS connection. Version: 21588
+1665385064.938196	CExV6A2sZZQ8kKlg1l	192.168.1.30	52044	192.168.1.254	443	tcp	HTTP	not a http reply line
+1665385066.849258	CDhqGE1simpmd7rdA6	192.168.1.30	39754	192.168.1.254	80	tcp	HTTP	not a http reply line
+#close	2022-10-10-10-13-17
